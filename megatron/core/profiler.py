@@ -28,7 +28,7 @@ def setup_profiler(profile_type,
                    profile_ranks,
                    profile_step_start,
                    profile_step_end,
-                   log_memrory_to_tensorboard,
+                   log_memory_to_tensorboard,
                    tensorboard_dir):
     if profile_type is None or not torch.distributed.get_rank() in profile_ranks:
         return
@@ -69,6 +69,7 @@ def setup_profiler(profile_type,
             schedule=schedule,
             activities=activities,
             on_trace_ready=torch.profiler.tensorboard_trace_handler(tensorboard_dir, use_gzip=True),
+            profile_memory=True if log_memory_to_tensorboard else False,
             with_stack=full)
 
         on_step_begin.append(when(is_start_step, profiler.start))
