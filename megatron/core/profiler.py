@@ -28,7 +28,9 @@ def setup_profiler(profile_type,
                    profile_ranks,
                    profile_step_start,
                    profile_step_end,
-                   tensorboard_dir):
+                   log_num_zeros_in_grad=False,
+                   tensorboard_dir,
+                   model=None):
     if profile_type is None or not torch.distributed.get_rank() in profile_ranks:
         return
 
@@ -56,6 +58,30 @@ def setup_profiler(profile_type,
 
     def is_capture_step():
         return cur_step >= start_step and cur_step <= end_step
+    
+    def count_gradient_zeros():
+        if not hasattr(count_gradient_zeros, 'writer'):
+            count_gradient_zeros.writer = torch.utils.tensorboard.SummaryWriter(tensorboard_dir)
+        
+        total_zeros = 0
+        total_elements = 0
+        
+        for name, param in model.named_parameters():
+            if param.grad is not None:
+                zeros = (param.grad == 0).sum().item()
+                total_zeros += zeros
+                total_elements += param.grad.numel()
+                
+        if total_elements > 0:
+            zero_percentage = (total_zeros / total_elements) * 100
+            count_gradient_zeros.writer.add_scalar(
+                'Gradient/zeros_percentage', 
+                zero_percentage,
+                cur_step
+            )
+
+    if log_num_zeros_in_grad:
+        on_step_end.append(when(is_capture_step, count_gradient_zeros))
 
     if profile_type.startswith('pt'):
         schedule = torch.profiler.schedule(wait=0, warmup=0, active=active_steps, repeat=1)

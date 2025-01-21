@@ -1124,7 +1124,8 @@ def train(forward_step_func, model, optimizer, opt_param_scheduler,
                    args.profile_ranks,
                    args.profile_step_start,
                    args.profile_step_end,
-                   args.tensorboard_dir)
+                   args.tensorboard_dir,
+                   model=model)
 
     while iteration < args.train_iters:
         trigger(on_step_begin)
