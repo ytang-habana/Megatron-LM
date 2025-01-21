@@ -1124,6 +1124,7 @@ def train(forward_step_func, model, optimizer, opt_param_scheduler,
                    args.profile_ranks,
                    args.profile_step_start,
                    args.profile_step_end,
+                   args.use_dist_ckpt,
                    args.tensorboard_dir)
 
     while iteration < args.train_iters:
