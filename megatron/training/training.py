@@ -10,6 +10,7 @@ import logging
 import math
 import os
 import sys
+import habana_frameworks.torch as htorch
 from .log_handler import CustomHandler
 # Make default logging level INFO, but filter out all log messages not from MCore.
 logging.basicConfig(handlers=[CustomHandler()], level=logging.INFO)
@@ -833,22 +834,16 @@ def training_log(loss_dict, total_loss_dict, learning_rate, decoupled_learning_r
             if wandb_writer:
                 wandb_writer.log({'params-norm': params_norm}, iteration)
         if args.log_memory_to_tensorboard:
-            mem_stats = torch.cuda.memory_stats()
-            writer.add_scalar(
-                "mem-reserved-bytes",
-                mem_stats["reserved_bytes.all.current"],
-                iteration,
-            )
-            writer.add_scalar(
-                "mem-allocated-bytes",
-                mem_stats["allocated_bytes.all.current"],
-                iteration,
-            )
-            writer.add_scalar(
-                "mem-allocated-count",
-                mem_stats["allocation.all.current"],
-                iteration,
-            )
+            if is_real_cuda_device_available():
+                mem_stats = torch.cuda.memory_stats()
+                writer.add_scalar("mem-reserved-bytes", mem_stats["reserved_bytes.all.current"], iteration)
+                writer.add_scalar("mem-allocated-bytes", mem_stats["allocated_bytes.all.current"], iteration)
+                writer.add_scalar("mem-allocated-count", mem_stats["allocation.all.current"], iteration)
+            elif torch.hpu.is_available():
+                mem_stats = htorch.hpu.memory_stats()
+                writer.add_scalar("mem-reserved-bytes", mem_stats["Limit"], iteration)
+                writer.add_scalar("mem-allocated-bytes", mem_stats["MaxInUse"], iteration)
+                writer.add_scalar("mem-allocated-count", mem_stats["TotalSystemAllocs"], iteration)
 
     if args.num_experts is not None:
         moe_loss_scale = 1 / get_num_microbatches()
