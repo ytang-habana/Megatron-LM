@@ -50,7 +50,7 @@ def setup_profiler(profile_type,
                    profile_ranks,
                    profile_step_start,
                    profile_step_end,
-                   use_dist_ckpt,
+                   use_dist_ckpt=False,
                    tensorboard_dir):
     if profile_type is None or not torch.distributed.get_rank() in profile_ranks:
         return
