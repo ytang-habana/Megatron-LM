@@ -18,16 +18,39 @@ import sys
 import os
 from .utils import is_real_cuda_device_available
 
+import torch.distributed as dist
+from torch.distributed.checkpoint import FileSystemReader, FileSystemWriter
+from torch.distributed.checkpoint import save_state_dict, load_state_dict
+
 on_step_begin = []
 on_step_end = []
 
 def trigger(phase):
     [f() for f in phase]
 
+
+def save_distributed_checkpoint(model, optimizer, step, checkpoint_dir):
+    state_dict = {
+        'model': model.state_dict(),
+        'optimizer': optimizer.state_dict(),
+        'step': step
+    }
+    storage_writer = FileSystemWriter(checkpoint_dir)
+    save_state_dict(state_dict, storage_writer)
+
+def load_distributed_checkpoint(model, optimizer, checkpoint_dir):
+    storage_reader = FileSystemReader(checkpoint_dir)
+    state_dict = {}
+    load_state_dict(state_dict, storage_reader)
+    model.load_state_dict(state_dict['model'])
+    optimizer.load_state_dict(state_dict['optimizer'])
+    return state_dict['step']
+
 def setup_profiler(profile_type,
                    profile_ranks,
                    profile_step_start,
                    profile_step_end,
+                   use_dist_ckpt,
                    tensorboard_dir):
     if profile_type is None or not torch.distributed.get_rank() in profile_ranks:
         return
@@ -73,6 +96,19 @@ def setup_profiler(profile_type,
         on_step_begin.append(when(is_start_step, profiler.start))
         on_step_end.append(when(is_capture_step, profiler.step))
         on_step_end.append(when(is_end_step, profiler.stop))
+        
+        if use_dist_ckpt:
+            def save_ckpt():
+                save_distributed_checkpoint(model, optimizer, cur_step, 
+                                        os.path.join(tensorboard_dir, f'ckpt_{cur_step}'))
+            
+            def load_ckpt():
+                if os.path.exists(os.path.join(tensorboard_dir, f'ckpt_{start_step}')):
+                    load_distributed_checkpoint(model, optimizer,
+                                            os.path.join(tensorboard_dir, f'ckpt_{start_step}'))
+            
+            on_step_begin.append(when(is_start_step, load_ckpt))
+            on_step_end.append(when(is_end_step, save_ckpt))
 
     elif profile_type == 'hltv':
         sys.path.append(os.environ['PYTORCH_MODULES_ROOT_PATH'])
